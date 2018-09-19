@@ -24,6 +24,10 @@ If that causes problems, you can write
 library like `pickle <http://docs.python.org/library/pickle.html>`_ or
 `PyYAML <http://pyyaml.org/>`_.
 
+.. hint:: Opening multiple TinyDB instances on the same data (e.g. with the
+   ``JSONStorage``) may result in unexpected behavior due to query caching.
+   See query_caching_ on how to disable the query cache.
+
 Alternative JSON library
 ........................
 
@@ -83,6 +87,9 @@ queries:
 >>> # Regex:
 >>> # Full item has to match the regex:
 >>> db.search(User.name.matches('[aZ]*'))
+>>> # Case insensitive search for 'John':
+>>> import re
+>>> db.search(User.name.matches('John', flags=re.IGNORECASE))
 >>> # Any part of the item has to match the regex:
 >>> db.search(User.name.search('b+'))
 
@@ -267,11 +274,11 @@ Of course you also can write your own operations:
 ...
 >>> db.update(your_operation(arguments), query)
 
-Upserting data
-..............
-
 Data access and modification
 ----------------------------
+
+Upserting data
+..............
 
 In some cases you'll need a mix of both ``update`` and ``insert``: ``upsert``.
 This operation is provided a document and a query. If it finds any documents
@@ -293,6 +300,10 @@ can get the number of stored documents:
 
 >>> len(db)
 3
+
+.. hint::
+    This will return the number of documents in the default table
+    (see the notes on the :ref:`default table <default_table>`).
 
 Then of course you can use ``db.search(...)`` as described in the :doc:`getting-started`
 section. But sometimes you want to get only one matching document. Instead of using
@@ -325,6 +336,27 @@ In a similar manner you can look up the number of documents matching a query:
 >>> db.count(User.name == 'John')
 2
 
+Replacing data
+..............
+
+Another occasionally useful operation is to replace a list of documents. If you
+have a list of documents with IDs (see document_ids_), you can pass them to
+``db.write_back(list)``:
+
+>>> docs = db.search(User.name == 'John')
+[{name: 'John', age: 12}, {name: 'John', age: 44}]
+>>> for doc in docs:
+...     doc['name'] = 'Jane'
+>>> db.write_back(docs)  # Will update the documents we retrieved
+>>> docs = db.search(User.name == 'John')
+[]
+>>> docs = db.search(User.name == 'Jane')
+[{name: 'Jane', age: 12}, {name: 'Jane', age: 44}]
+
+Alternatively you can pass a list of documents along with a list of document IDs
+to achieve the same goal. In this case, the length of the document list and the
+ID list has to be equal.
+
 Recap
 ^^^^^
 
@@ -338,6 +370,8 @@ Let's summarize the ways to handle data:
 | **Updating data**                                                                             |
 +-------------------------------+---------------------------------------------------------------+
 | ``db.update(operation, ...)`` | Update all matching documents with a special operation        |
++-------------------------------+---------------------------------------------------------------+
+| ``db.write_back(docs)``       | Replace all documents with the updated versions               |
 +-------------------------------+---------------------------------------------------------------+
 | **Retrieving data**                                                                           |
 +-------------------------------+---------------------------------------------------------------+
@@ -471,7 +505,7 @@ size by passing the ``cache_size`` to the ``table(...)`` function:
 >>> table = db.table('table_name', cache_size=30)
 
 .. hint:: You can set ``cache_size`` to ``None`` to make the cache unlimited in
-   size.
+   size. Also, you can set ``cache_size`` to 0 to disable it.
 
 Storage & Middleware
 --------------------
@@ -496,7 +530,10 @@ To use the in-memory storage, use:
     underlying storage. For the JSON storage you can use this to pass
     additional keyword arguments to Python's
     `json.dump(...) <https://docs.python.org/2/library/json.html#json.dump>`_
-    method.
+    method. For example, you can set it to create prettified JSON files like
+    this:
+
+    >>> db = TinyDB('db.json', sort_keys=True, indent=4, separators=(',', ': '))
 
 To modify the default storage for all ``TinyDB`` instances, set the
 ``DEFAULT_STORAGE`` class variable:
@@ -514,7 +551,6 @@ behaviour.
 >>> db = TinyDB('/path/to/db.json', storage=CachingMiddleware(JSONStorage))
 
 .. hint::
-
     You can nest middleware:
 
     >>> db = TinyDB('/path/to/db.json',

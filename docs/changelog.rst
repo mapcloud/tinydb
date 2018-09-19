@@ -10,7 +10,57 @@ see `semver.org <http://semver.org/>`_
 unreleased
 ^^^^^^^^^^
 
-- *nothing yet*
+*Nothing yet*
+
+v3.11.1 (2018-09-13)
+^^^^^^^^^^^^^^^^^^^^
+
+- Bugfix: Make path queries (``db.search(where('key))``) work again
+  (see `issue 232 <https://github.com/msiemens/tinydb/issues/232>`_)
+- Improvement: Add custom ``repr`` representations for main classes
+  (see `pull request 229 <https://github.com/msiemens/tinydb/issues/229>`_)
+
+v3.11.0 (2018-08-20)
+^^^^^^^^^^^^^^^^^^^^
+
+- **Drop official support for Python 3.3**. Python 3.3 has reached its
+  official End Of Life as of September 29, 2017. It will probably continue
+  to work, but will not be tested against
+  (`issue 217 <https://github.com/msiemens/tinydb/issues/217>`_)
+
+- Feature: Allow extending TinyDB with a custom storage proxy class
+  (see `pull request 224 <https://github.com/msiemens/tinydb/pull/224>`_)
+
+- Bugfix: Return list of document IDs for upsert when creating a new
+  document (see `issue 223 <https://github.com/msiemens/tinydb/issues/223>`_)
+
+v3.10.0 (2018-07-21)
+^^^^^^^^^^^^^^^^^^^^
+
+- Feature: Add support for regex flags
+  (see `pull request 216 <https://github.com/msiemens/tinydb/pull/216>`_)
+
+v3.9.0 (2018-04-24)
+^^^^^^^^^^^^^^^^^^^
+
+- Feature: Allow setting a table class for single table only
+  (see `issue 197 <https://github.com/msiemens/tinydb/issues/197>`_)
+- Internal change: call fsync after flushing ``JSONStorage``
+  (see `issue 208 <https://github.com/msiemens/tinydb/issues/208>`_)
+
+v3.8.1 (2018-03-26)
+^^^^^^^^^^^^^^^^^^^
+
+- Bugfix: Don't install tests as a package anymore
+  (see `pull request #195 <https://github.com/msiemens/tinydb/pull/195>`_)
+
+v3.8.0 (2018-03-01)
+^^^^^^^^^^^^^^^^^^^
+
+- Feature: Allow disabling the query cache with ``db.table(name, cache_size=0)``
+  (see `pull request #187 <https://github.com/msiemens/tinydb/pull/187>`_)
+- Feature: Add ``db.write_back(docs)`` for replacing documents
+  (see `pull request #184 <https://github.com/msiemens/tinydb/pull/184>`_)
 
 v3.7.0 (2017-11-11)
 ^^^^^^^^^^^^^^^^^^^

@@ -37,12 +37,13 @@ class QueryImpl(object):
 
     Queries can be combined with logical and/or and modified with logical not.
     """
+
     def __init__(self, test, hashval):
-        self.test = test
+        self._test = test
         self.hashval = hashval
 
     def __call__(self, value):
-        return self.test(value)
+        return self._test(value)
 
     def __hash__(self):
         return hash(self.hashval)
@@ -72,7 +73,7 @@ class QueryImpl(object):
                          ('not', self.hashval))
 
 
-class Query(object):
+class Query(QueryImpl):
     """
     TinyDB Queries.
 
@@ -105,14 +106,38 @@ class Query(object):
 
     def __init__(self):
         self._path = []
+        super(Query, self).__init__(
+            self._prepare_test(lambda _: True),
+            ('path', tuple(self._path))
+        )
+
+    def __repr__(self):
+        return '{}()'.format(type(self).__name__)
+
+    def __hash__(self):
+        return super(Query, self).__hash__()
 
     def __getattr__(self, item):
         query = Query()
         query._path = self._path + [item]
+        query.hashval = ('path', tuple(query._path))
 
         return query
 
     __getitem__ = __getattr__
+
+    def _prepare_test(self, test):
+        def runner(value):
+            try:
+                # Resolve the path
+                for part in self._path:
+                    value = value[part]
+            except (KeyError, TypeError):
+                return False
+            else:
+                return test(value)
+
+        return runner
 
     def _generate_test(self, test, hashval):
         """
@@ -125,17 +150,7 @@ class Query(object):
         if not self._path:
             raise ValueError('Query has no path')
 
-        def impl(value):
-            try:
-                # Resolve the path
-                for part in self._path:
-                    value = value[part]
-            except (KeyError, TypeError):
-                return False
-            else:
-                return test(value)
-
-        return QueryImpl(impl, hashval)
+        return QueryImpl(self._prepare_test(test), hashval)
 
     def __eq__(self, rhs):
         """
@@ -163,8 +178,10 @@ class Query(object):
             def test(value):
                 return value == rhs
 
-        return self._generate_test(lambda value: test(value),
-                                   ('==', tuple(self._path), freeze(rhs)))
+        return self._generate_test(
+            lambda value: test(value),
+            ('==', tuple(self._path), freeze(rhs))
+        )
 
     def __ne__(self, rhs):
         """
@@ -174,8 +191,10 @@ class Query(object):
 
         :param rhs: The value to compare against
         """
-        return self._generate_test(lambda value: value != rhs,
-                                   ('!=', tuple(self._path), freeze(rhs)))
+        return self._generate_test(
+            lambda value: value != rhs,
+            ('!=', tuple(self._path), freeze(rhs))
+        )
 
     def __lt__(self, rhs):
         """
@@ -185,8 +204,10 @@ class Query(object):
 
         :param rhs: The value to compare against
         """
-        return self._generate_test(lambda value: value < rhs,
-                                   ('<', tuple(self._path), rhs))
+        return self._generate_test(
+            lambda value: value < rhs,
+            ('<', tuple(self._path), rhs)
+        )
 
     def __le__(self, rhs):
         """
@@ -196,8 +217,10 @@ class Query(object):
 
         :param rhs: The value to compare against
         """
-        return self._generate_test(lambda value: value <= rhs,
-                                   ('<=', tuple(self._path), rhs))
+        return self._generate_test(
+            lambda value: value <= rhs,
+            ('<=', tuple(self._path), rhs)
+        )
 
     def __gt__(self, rhs):
         """
@@ -207,8 +230,10 @@ class Query(object):
 
         :param rhs: The value to compare against
         """
-        return self._generate_test(lambda value: value > rhs,
-                                   ('>', tuple(self._path), rhs))
+        return self._generate_test(
+            lambda value: value > rhs,
+            ('>', tuple(self._path), rhs)
+        )
 
     def __ge__(self, rhs):
         """
@@ -218,21 +243,23 @@ class Query(object):
 
         :param rhs: The value to compare against
         """
-        return self._generate_test(lambda value: value >= rhs,
-                                   ('>=', tuple(self._path), rhs))
+        return self._generate_test(
+            lambda value: value >= rhs,
+            ('>=', tuple(self._path), rhs)
+        )
 
     def exists(self):
         """
         Test for a dict where a provided key exists.
 
-        >>> Query().f1.exists() >= 42
-
-        :param rhs: The value to compare against
+        >>> Query().f1.exists()
         """
-        return self._generate_test(lambda _: True,
-                                   ('exists', tuple(self._path)))
+        return self._generate_test(
+            lambda _: True,
+            ('exists', tuple(self._path))
+        )
 
-    def matches(self, regex):
+    def matches(self, regex, flags=0):
         """
         Run a regex test against a dict value (whole string has to match).
 
@@ -240,10 +267,12 @@ class Query(object):
 
         :param regex: The regular expression to use for matching
         """
-        return self._generate_test(lambda value: re.match(regex, value),
-                                   ('matches', tuple(self._path), regex))
+        return self._generate_test(
+            lambda value: re.match(regex, value, flags),
+            ('matches', tuple(self._path), regex)
+        )
 
-    def search(self, regex):
+    def search(self, regex, flags=0):
         """
         Run a regex test against a dict value (only substring string has to
         match).
@@ -252,8 +281,10 @@ class Query(object):
 
         :param regex: The regular expression to use for matching
         """
-        return self._generate_test(lambda value: re.search(regex, value),
-                                   ('search', tuple(self._path), regex))
+        return self._generate_test(
+            lambda value: re.search(regex, value, flags),
+            ('search', tuple(self._path), regex)
+        )
 
     def test(self, func, *args):
         """
@@ -268,8 +299,10 @@ class Query(object):
                      argument
         :param args: Additional arguments to pass to the test function
         """
-        return self._generate_test(lambda value: func(value, *args),
-                                   ('test', tuple(self._path), func, args))
+        return self._generate_test(
+            lambda value: func(value, *args),
+            ('test', tuple(self._path), func, args)
+        )
 
     def any(self, cond):
         """
@@ -301,12 +334,14 @@ class Query(object):
             def _cmp(value):
                 return is_sequence(value) and any(e in cond for e in value)
 
-        return self._generate_test(lambda value: _cmp(value),
-                                   ('any', tuple(self._path), freeze(cond)))
+        return self._generate_test(
+            lambda value: _cmp(value),
+            ('any', tuple(self._path), freeze(cond))
+        )
 
     def all(self, cond):
         """
-        Check if a condition is met by any document in a list,
+        Check if a condition is met by all documents in a list,
         where a condition can also be a sequence (e.g. list).
 
         >>> Query().f1.all(Query().f2 == 1)
@@ -332,8 +367,10 @@ class Query(object):
             def _cmp(value):
                 return is_sequence(value) and all(e in value for e in cond)
 
-        return self._generate_test(lambda value: _cmp(value),
-                                   ('all', tuple(self._path), freeze(cond)))
+        return self._generate_test(
+            lambda value: _cmp(value),
+            ('all', tuple(self._path), freeze(cond))
+        )
 
     def one_of(self, items):
         """
@@ -343,8 +380,10 @@ class Query(object):
 
         :param items: The list of items to check with
         """
-        return self._generate_test(lambda value: value in items,
-                                   ('one_of', tuple(self._path), freeze(items)))
+        return self._generate_test(
+            lambda value: value in items,
+            ('one_of', tuple(self._path), freeze(items))
+        )
 
 
 def where(key):

@@ -1,5 +1,6 @@
 # coding=utf-8
 import sys
+import re
 
 import pytest
 
@@ -173,6 +174,53 @@ def test_update_ids(db):
     assert db.count(where('int') == 2) == 2
 
 
+def test_write_back(db):
+    docs = db.search(where('int') == 1)
+    for doc in docs:
+        doc['int'] = [1, 2, 3]
+
+    db.write_back(docs)
+    assert db.count(where('int') == [1, 2, 3]) == 3
+
+
+def test_write_back_whole_doc(db):
+    docs = db.search(where('int') == 1)
+    doc_ids = [doc.doc_id for doc in docs]
+    for i, doc in enumerate(docs):
+        docs[i] = {'newField': i}
+
+    db.write_back(docs, doc_ids)
+    assert db.count(where('newField') == 0) == 1
+    assert db.count(where('newField') == 1) == 1
+    assert db.count(where('newField') == 2) == 1
+
+
+def test_write_back_returns_ids(db):
+    db.purge()
+    assert db.insert({'int': 1, 'char': 'a'}) == 1
+    assert db.insert({'int': 1, 'char': 'a'}) == 2
+
+    docs = [{'word': 'hello'}, {'word': 'world'}]
+
+    assert db.write_back(docs, [1, 2]) == [1, 2]
+
+
+def test_write_back_fails(db):
+    with pytest.raises(ValueError):
+        db.write_back([{'get': 'error'}], [1, 2])
+
+
+def test_write_back_id_exceed(db):
+    db.purge()
+    db.insert({'int': 1})
+    with pytest.raises(IndexError):
+        db.write_back([{'get': 'error'}], [2])
+
+
+def test_write_back_empty_ok(db):
+    db.write_back([])
+
+
 def test_upsert(db):
     assert len(db) == 3
 
@@ -181,7 +229,7 @@ def test_upsert(db):
     assert db.count(where('int') == 5) == 1
 
     # Document missing
-    db.upsert({'int': 9, 'char': 'x'}, where('char') == 'x')
+    assert db.upsert({'int': 9, 'char': 'x'}, where('char') == 'x') == [4]
     assert db.count(where('int') == 9) == 1
 
 
@@ -191,6 +239,15 @@ def test_search(db):
 
     assert len(db._query_cache) == 1
     assert len(db.search(where('int') == 1)) == 3  # Query result from cache
+
+
+def test_search_path(db):
+    assert not db._query_cache
+    assert len(db.search(where('int'))) == 3
+    assert len(db._query_cache) == 1
+
+    assert len(db.search(where('asd'))) == 0
+    assert len(db.search(where('int'))) == 3  # Query result from cache
 
 
 def test_get(db):
@@ -536,3 +593,119 @@ def test_eids(db):
 
     with pytest.raises(TypeError):
         db.get(eid=[1], doc_id=[1])
+
+
+def test_custom_table_class():
+    from tinydb.database import Table
+
+    class MyTableClass(Table):
+        pass
+
+    # Table class for single table
+    db = TinyDB(storage=MemoryStorage)
+    assert isinstance(TinyDB(storage=MemoryStorage).table(),
+                      Table)
+    assert isinstance(db.table('my_table', table_class=MyTableClass),
+                      MyTableClass)
+
+    # Table class for all tables
+    TinyDB.table_class = MyTableClass
+    assert isinstance(TinyDB(storage=MemoryStorage).table(),
+                      MyTableClass)
+    assert isinstance(TinyDB(storage=MemoryStorage).table('my_table'),
+                      MyTableClass)
+
+    # Reset default table class
+    TinyDB.table_class = Table
+
+
+def test_string_key():
+    from tinydb.database import Table, StorageProxy, Document
+    from tinydb.storages import MemoryStorage
+
+    class StorageProxy2(StorageProxy):
+        def _new_document(self, key, val):
+            # Don't convert the key to a number here!
+            return Document(val, key)
+
+    class Table2(Table):
+        def _init_last_id(self, data):
+            if data:
+                self._last_id = len(data)
+            else:
+                self._last_id = 0
+
+        def _get_next_id(self):
+            next_id = self._last_id + 1
+            data = self._read()
+            while str(next_id) in data:
+                next_id += 1
+            self._last_id = next_id
+            return str(next_id)
+
+        def _get_doc_id(self, document):
+            if not isinstance(document, dict):
+                raise ValueError('Document is not a dictionary')
+            return document.get('doc_id') or self._get_next_id()
+
+    db = TinyDB(storage=MemoryStorage, table_class=Table2,
+                storage_proxy_class=StorageProxy2)
+    table = db.table()
+    table.insert({'doc_id': 'abc'})
+    assert table.get(doc_id='abc')['doc_id'] == 'abc'
+    assert table._last_id == 0
+    table.insert({'abc': 10})
+    assert table.get(doc_id='1')['abc'] == 10
+    assert table._last_id == 1
+
+
+def test_string_key2():
+    from tinydb.database import Table, StorageProxy, Document
+    from tinydb.storages import MemoryStorage
+
+    class StorageProxy2(StorageProxy):
+        def _new_document(self, key, val):
+            # Don't convert the key to a number here!
+            return Document(val, key)
+
+    class Table2(Table):
+        def _init_last_id(self, data):
+            if data:
+                self._last_id = len(data)
+            else:
+                self._last_id = 0
+
+        def _get_next_id(self):
+            next_id = self._last_id + 1
+            data = self._read()
+            while str(next_id) in data:
+                next_id += 1
+            self._last_id = next_id
+            return str(next_id)
+
+        def _get_doc_id(self, document):
+            if not isinstance(document, dict):
+                raise ValueError('Document is not a dictionary')
+            return document.get('doc_id') or self._get_next_id()
+
+    TinyDB.storage_proxy_class = StorageProxy2
+    db = TinyDB(storage=MemoryStorage, table_class=Table2)
+    table = db.table()
+    table.insert({'doc_id': 'abc'})
+    assert table.get(doc_id='abc')['doc_id'] == 'abc'
+    assert table._last_id == 0
+    table.insert({'abc': 10})
+    assert table.get(doc_id='1')['abc'] == 10
+    assert table._last_id == 1
+
+
+def test_repr(tmpdir):
+    path = str(tmpdir.join('db.json'))
+
+    assert re.match(
+        r"<TinyDB "
+        r"tables=\[u?\'_default\'\], "
+        r"tables_count=1, "
+        r"default_table_documents_count=0, "
+        r"all_tables_documents_count=\[\'_default=0\'\]>",
+        repr(TinyDB(path)))
